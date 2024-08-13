@@ -774,15 +774,14 @@ Citizen.CreateThread(function()
             if Queue.InitHostName then
                 SetConvar("sv_hostname", (qCount > 0 and "[" .. tostring(qCount) .. "] " or "") .. Queue.InitHostName)
             else
-                Queue.InitHostName = GetConvar("sv_hostname")
+                Queue.InitHostName = GetConvar("sv_hostname",'')
                 Queue.InitHostName = Queue.InitHostName ~= "default FXServer" and Queue.InitHostName or false
             end
         end
     end
 end)
 
-RegisterServerEvent("Queue:playerActivated")
-AddEventHandler("Queue:playerActivated", function()
+RegisterNetEvent("Queue:playerActivated", function()
     local src = source
     local ids = Queue:GetIds(src)
 
