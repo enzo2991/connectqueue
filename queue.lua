@@ -7,6 +7,8 @@ Queue.MaxPlayers = GetConvarInt('sv_maxclients', 30)
 Queue.Debug = GetConvar('sv_debugqueue', 'true') == 'true' and true or false
 Queue.DisplayQueue = GetConvar('sv_displayqueue', 'true') == 'true' and true or false
 Queue.InitHostName = GetConvar('sv_hostname', '')
+Queue.discordBotToken = GetConvar('discord:token', '')
+Queue.discordServerGuild = GetConvar('discord:guild', '')
 
 function Queue.OnReady(cb)
     if not cb then return end
@@ -212,13 +214,11 @@ function Queue:AddToQueue(ids, connectTime, name, src, deferrals,point,roleStrin
         queuetime = function() return (os.time() - connectTime) end
     }
 
-    local _pos = false
+    local _pos = 0
     local queueCount = Queue:GetSize() + 1
     local queueList = Queue:GetQueueList()
-    if Config.enableDiscordWhitelist then
-        local tempPos = 0
+    if Config.DiscordPriority.Activated then
         for pos, data in ipairs(queueList) do
-            
             if data.point >= point then
                 _pos = pos+1
             end
@@ -524,8 +524,8 @@ local function playerConnect(name, setKickReason, deferrals)
     end
     
     -- print(enableDiscordWhitelist)
-    if Config.enableDiscordWhitelist then
-        if Config.enableDiscordWhitelist and currentDiscordID == "" then
+    if Config.DiscordPriority.Activated then
+        if Config.DiscordPriority.Activated and currentDiscordID == "" then
             -- prevent joining
             done(Config.Language.whitelist.noDiscord)
             CancelEvent()
@@ -536,12 +536,12 @@ local function playerConnect(name, setKickReason, deferrals)
             
             deferrals.update(Config.Language.whitelist.checkingRoles)
             -- deferrals.update(Config.Language..connecting)
-            PerformHttpRequest("https://discord.com/api/v10/guilds/"..Config.discordServerGuild.."/members".."/"..string.sub(currentDiscordID, 9), function (errorCode, rdata, resultHeaders)
+            PerformHttpRequest("https://discord.com/api/v10/guilds/"..Queue.discordServerGuild.."/members".."/"..string.sub(currentDiscordID, 9), function (errorCode, rdata, resultHeaders)
                 local res=json.decode(rdata)
                 if errorCode == 200 then
                     local roles = json.encode(res.roles)
     
-                    for key, roleData in pairs(Config.Roles) do
+                    for key, roleData in pairs(Config.DiscordPriority.Roles) do
                         if string.find(roles,roleData.roleID) then
                             print(roleData.point)
                             point = point + roleData.point
@@ -550,7 +550,7 @@ local function playerConnect(name, setKickReason, deferrals)
                     end
     
                 end
-            end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Config.discordBotToken})
+            end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Queue.discordBotToken})
             Wait(1000)
     
             
@@ -818,14 +818,15 @@ AddEventHandler("onResourceStart", function(resourceName)
         Queue:DebugPrint("^1 [connectqueue] Disabling hardcap ^7")
         StopResource("hardcap")
     end
+    
     if Queue.DisplayQueue and Queue.InitHostName then
         SetConvar("sv_hostname", Queue.InitHostName)
     end
     
-    if Config.enableDiscordWhitelist then
-        PerformHttpRequest("https://discord.com/api/v10/guilds/"..Config.discordServerGuild, function (errorCode, resultData, resultHeaders)
+    if Config.DiscordPriority.Activated then
+        PerformHttpRequest("https://discord.com/api/v10/guilds/"..Queue.discordServerGuild, function (errorCode, resultData, resultHeaders)
             if errorCode == 200 then
-                PerformHttpRequest("https://discord.com/api/v10/guilds/"..Config.discordServerGuild.."/preview", function (errorCode, rdata, resultHeaders)
+                PerformHttpRequest("https://discord.com/api/v10/guilds/"..Queue.discordServerGuild.."/preview", function (errorCode, rdata, resultHeaders)
                     local res=json.decode(rdata)
                     if errorCode == 200 then
                         if not announce then
@@ -843,7 +844,7 @@ AddEventHandler("onResourceStart", function(resourceName)
                             print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Check Discord Token xxxxxxxxxxxxxx\n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
                         end
                     end
-                  end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Config.discordBotToken})
+                  end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Queue.discordBotToken})
             elseif errorCode == 403 then
                 if not announce then
                     announce=true
@@ -861,7 +862,7 @@ AddEventHandler("onResourceStart", function(resourceName)
                 end
 
             end
-          end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Config.discordBotToken})
+          end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Queue.discordBotToken})
     end
     Queue.LoadExports()
 end)

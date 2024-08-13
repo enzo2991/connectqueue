@@ -1,33 +1,36 @@
-# ConnectQueue
----
-Easy to use queue system for FiveM with:
-- Simple API
-- Priority System
-- Config
-    - Ability for whitelist only
-    - Require steam
-    - Language options
+# 🚀 ConnectQueue
 
-**Please report any bugs on the release thread [Here](https://forum.fivem.net/t/alpha-connectqueue-a-server-queue-system-fxs/22228) or through [GitHub](https://github.com/Nick78111/ConnectQueue/issues).**
+A lightweight and easy-to-use queue system for FiveM, packed with features:
+
+- 🛠️ **Simple API** for seamless integration
+- 🏅 **Priority System** to manage player queues efficiently
+- ⚙️ **Extensive Configuration Options**:
+  - 🔒 Whitelist-only mode
+  - 🎮 Steam requirement
+  - 🌐 Multiple language support
+- 💬 **Supports the latest Discord API** for robust and up-to-date integration
+
+🐞 **Please report any bugs via the [GitHub Issues](https://github.com/enzo2991/connectqueue/issues).**
 
 ## How to install
 ---
 - Drop the folder inside your resources folder.
 - Add `start connectqueue` inside your server.cfg. - *Preferrably at the top*
 - Set convars to your liking.
-- Open `connectqueue/server/sv_queue_config.lua` and edit to your liking.
+- Open `config.lua` and edit to your liking.
 - Renaming the resource may cause problems.
 
-## ConVars
----
-	set sv_debugqueue true # prints debug messages to console
-	set sv_displayqueue true # shows queue count in the server name '[count] server name'
+## 🔧 ConVars
+    Set the following ConVars in your `server.cfg`:
+    
+    ```bash
+        setr discord:token 'your token' #Token for Bot Discord if you enable `enableDiscordWhitelist`
+        setr discord:guild 'your Id guild discord' #Guild Id discord if you enable `enableDiscordWhitelist`
+        set sv_debugqueue true # prints debug messages to console
+        set sv_displayqueue true # shows queue count in the server name '[count] server name'
+    ```
 
-## How to use / Examples
----
-To use the API add `server_script "@connectqueue/connectqueue.lua"` at the top of the `__resource.lua` file in question.
-I would also suggest adding `dependency "connectqueue"` to it aswell.
-You may now use any of the functions below, anywhere in that resource.
+## 🛠️ Usage and Examples
 
 ### OnReady
 This is called when the queue functions are ready to be used.
