@@ -207,8 +207,7 @@ function Queue:AddToQueue(ids, connectTime, name, src, deferrals,point,roleStrin
     local _pos = 0
     local queueCount = Queue:GetSize() + 1
     local queueList = Queue:GetQueueList()
-    if Config.enableDiscordWhitelist then
-        local tempPos = 0
+    if Config.DiscordPriority.Activated then
         for pos, data in ipairs(queueList) do
             
             if data.point >= point then
@@ -518,8 +517,8 @@ local function playerConnect(name, setKickReason, deferrals)
     end
     
     -- print(enableDiscordWhitelist)
-    if Config.enableDiscordWhitelist then
-        if Config.enableDiscordWhitelist and currentDiscordID == "" then
+    if Config.DiscordPriority.Activated then
+        if Config.DiscordPriority.Activated and currentDiscordID == "" then
             -- prevent joining
             done(Config.Language.whitelist.noDiscord)
             CancelEvent()
@@ -535,7 +534,7 @@ local function playerConnect(name, setKickReason, deferrals)
                 if errorCode == 200 then
                     local roles = json.encode(res.roles)
     
-                    for key, roleData in pairs(Config.Roles) do
+                    for key, roleData in pairs(Config.DiscordPriority.Roles) do
                         if string.find(roles,roleData.roleID) then
                             print(roleData.point)
                             point = point + roleData.point
@@ -817,7 +816,7 @@ AddEventHandler("onResourceStart", function(resourceName)
         SetConvar("sv_hostname", Queue.InitHostName)
     end
     
-    if Config.enableDiscordWhitelist then
+    if Config.DiscordPriority then
         local announce = false
         PerformHttpRequest("https://discord.com/api/v10/guilds/"..Queue.discordServerGuild, function (errorCode, resultData, resultHeaders)
             if errorCode == 200 then

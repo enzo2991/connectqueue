@@ -69,7 +69,7 @@ Config.Language = {
 }
 
 Config.DiscordPriority = {
-    activated = false,
+    Activated = false,
     Roles = {
         owner = {
             roleID = "", --Role ID
