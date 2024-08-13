@@ -19,17 +19,7 @@ end
 function Queue.OnJoin(cb, resource)
     if not cb then return end
     local tmp = {resource = resource, func = cb}
-    table_insert(_Queue.JoinCbs, tmp)
-end
-
-function Queue.AddPriority(id, power, temp)
-    if not Queue.IsReady() then return end
-    Queue.Exports:AddPriority(id, power, temp)
-end
-
-function Queue.RemovePriority(id)
-    if not Queue.IsReady() then return end
-    Queue.Exports:RemovePriority(id)
+    _Queue.JoinCbs[#_Queue.JoinCbs+1] = tmp
 end
 
 function Queue.IsReady()
@@ -53,7 +43,7 @@ function Queue:HexIdToSteamId(hexId)
     local cid = math.floor(tonumber(string.sub(hexId, 7), 16))
 	local steam64 = math.floor(tonumber(string.sub(cid, 2)))
 	local a = steam64 % 2 == 0 and 0 or 1
-	local b = math.floor(math_abs(6561197960265728 - steam64 - a) / 2)
+	local b = math.floor(math.abs(6561197960265728 - steam64 - a) / 2)
 	local sid = "steam_0:"..a..":"..(a == 1 and b -1 or b)
     return sid
 end
@@ -217,8 +207,10 @@ function Queue:AddToQueue(ids, connectTime, name, src, deferrals,point,roleStrin
     local _pos = 0
     local queueCount = Queue:GetSize() + 1
     local queueList = Queue:GetQueueList()
-    if Config.DiscordPriority.Activated then
+    if Config.enableDiscordWhitelist then
+        local tempPos = 0
         for pos, data in ipairs(queueList) do
+            
             if data.point >= point then
                 _pos = pos+1
             end
@@ -372,6 +364,7 @@ function Queue:GetIds(src)
 end
 
 function Queue:AddPriority(id, power, temp)
+    if not Queue.IsReady() then return end
     if not id then return false end
 
     if type(id) == "table" then
@@ -402,6 +395,7 @@ function Queue:AddPriority(id, power, temp)
 end
 
 function Queue:RemovePriority(id)
+    if not Queue.IsReady() then return end
     if not id then return false end
     id = string.lower(id)
     Queue:GetPriorityList()[id] = nil
@@ -524,8 +518,8 @@ local function playerConnect(name, setKickReason, deferrals)
     end
     
     -- print(enableDiscordWhitelist)
-    if Config.DiscordPriority.Activated then
-        if Config.DiscordPriority.Activated and currentDiscordID == "" then
+    if Config.enableDiscordWhitelist then
+        if Config.enableDiscordWhitelist and currentDiscordID == "" then
             -- prevent joining
             done(Config.Language.whitelist.noDiscord)
             CancelEvent()
@@ -541,7 +535,7 @@ local function playerConnect(name, setKickReason, deferrals)
                 if errorCode == 200 then
                     local roles = json.encode(res.roles)
     
-                    for key, roleData in pairs(Config.DiscordPriority.Roles) do
+                    for key, roleData in pairs(Config.Roles) do
                         if string.find(roles,roleData.roleID) then
                             print(roleData.point)
                             point = point + roleData.point
@@ -781,7 +775,8 @@ Citizen.CreateThread(function()
     end
 end)
 
-RegisterNetEvent("Queue:playerActivated", function()
+RegisterServerEvent("Queue:playerActivated")
+AddEventHandler("Queue:playerActivated", function()
     local src = source
     local ids = Queue:GetIds(src)
 
@@ -813,17 +808,17 @@ AddEventHandler("onResourceStart", function(resourceName)
         return
     end
 
-    local announce=false
-    if Config.DisableHardCap and  GetResourceState('hardcap') == 'started' then
+    if Config.DisableHardCap and GetResourceState('hardcap') == 'started' then
         Queue:DebugPrint("^1 [connectqueue] Disabling hardcap ^7")
         StopResource("hardcap")
     end
-    
+
     if Queue.DisplayQueue and Queue.InitHostName then
         SetConvar("sv_hostname", Queue.InitHostName)
     end
     
-    if Config.DiscordPriority.Activated then
+    if Config.enableDiscordWhitelist then
+        local announce = false
         PerformHttpRequest("https://discord.com/api/v10/guilds/"..Queue.discordServerGuild, function (errorCode, resultData, resultHeaders)
             if errorCode == 200 then
                 PerformHttpRequest("https://discord.com/api/v10/guilds/"..Queue.discordServerGuild.."/preview", function (errorCode, rdata, resultHeaders)
