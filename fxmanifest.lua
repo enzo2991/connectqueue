@@ -1,8 +1,8 @@
-fx_version 'bodacious'
-game 'common'
+fx_version 'cerulean'
+use_experimental_fxv2_oal 'yes'
+lua54 'yes'
+game 'gta5'
 
-server_script "server/sv_queue_config.lua"
-server_script "connectqueue.lua"
+server_scripts {'config.lua','queue.lua'}
+client_script 'client.lua'
 
-server_script "shared/sh_queue.lua"
-client_script "shared/sh_queue.lua"

@@ -1,27 +1,64 @@
-if not IsDuplicityVersion() then
-    Citizen.CreateThread(function()
-        while true do
-            Citizen.Wait(0)
-            if NetworkIsSessionStarted() then
-                TriggerServerEvent("Queue:playerActivated")
-                return
-            end
-        end
-    end)
-    return
+Queue = {}
+Queue.Ready = false
+Queue.Exports = nil
+Queue.ReadyCbs = {}
+Queue.CurResource = GetCurrentResourceName()
+Queue.MaxPlayers = GetConvarInt('sv_maxclients', 30)
+Queue.Debug = GetConvar('sv_debugqueue', 'true') == 'true' and true or false
+Queue.DisplayQueue = GetConvar('sv_displayqueue', 'true') == 'true' and true or false
+Queue.InitHostName = GetConvar('sv_hostname', '')
+
+function Queue.OnReady(cb)
+    if not cb then return end
+    if Queue.IsReady() then cb() return end
+    table.insert(Queue.ReadyCbs, cb)
 end
 
-local Queue = {}
--- EDIT THESE IN SERVER.CFG + OTHER OPTIONS IN CONFIG.LUA
-Queue.MaxPlayers = GetConvarInt("sv_maxclients", 30)
-Queue.Debug = GetConvar("sv_debugqueue", "true") == "true" and true or false
-Queue.DisplayQueue = GetConvar("sv_displayqueue", "true") == "true" and true or false
-Queue.InitHostName = GetConvar("sv_hostname")
+function Queue.OnJoin(cb, resource)
+    if not cb then return end
+    local tmp = {resource = resource, func = cb}
+    table_insert(_Queue.JoinCbs, tmp)
+end
 
+function Queue.AddPriority(id, power, temp)
+    if not Queue.IsReady() then return end
+    Queue.Exports:AddPriority(id, power, temp)
+end
+
+function Queue.RemovePriority(id)
+    if not Queue.IsReady() then return end
+    Queue.Exports:RemovePriority(id)
+end
+
+function Queue.IsReady()
+    return Queue.Ready
+end
+
+function Queue.LoadExports()
+    Queue.Exports = GetQueueExports()
+    Queue.Ready = true
+    Queue.ReadyCallbacks()
+end
+
+function Queue.ReadyCallbacks()
+    if not Queue.IsReady() then return end
+    for _, cb in ipairs(Queue.ReadyCbs) do
+        cb()
+    end
+end
+
+function Queue:HexIdToSteamId(hexId)
+    local cid = math.floor(tonumber(string.sub(hexId, 7), 16))
+	local steam64 = math.floor(tonumber(string.sub(cid, 2)))
+	local a = steam64 % 2 == 0 and 0 or 1
+	local b = math.floor(math_abs(6561197960265728 - steam64 - a) / 2)
+	local sid = "steam_0:"..a..":"..(a == 1 and b -1 or b)
+    return sid
+end
 
 
 -- This is needed because msgpack will break when tables are too large
-local _Queue = {}
+_Queue = {}
 _Queue.QueueList = {}
 _Queue.PlayerList = {}
 _Queue.PlayerCount = 0
@@ -31,26 +68,8 @@ _Queue.JoinCbs = {}
 _Queue.TempPriority = {}
 _Queue.JoinDelay = GetGameTimer() + Config.JoinDelay and Config.JoinDelay or 0
 
-local tostring = tostring
-local tonumber = tonumber
-local ipairs = ipairs
-local pairs = pairs
-local print = print
-local string_len = string.len
-local string_sub = string.sub
-local string_format = string.format
-local string_lower = string.lower
-local math_abs = math.abs
-local math_floor = math.floor
-local math_random = math.random
-local os_time = os.time
-local table_insert = table.insert
-local table_remove = table.remove
-
-Queue.InitHostName = Queue.InitHostName ~= "default FXServer" and Queue.InitHostName or false
-
 for id, power in pairs(Config.Priority) do
-    _Queue.Priority[string_lower(id)] = power
+    _Queue.Priority[string.lower(id)] = power
 end
 
 function Queue:DebugPrint(msg)
@@ -61,19 +80,9 @@ function Queue:DebugPrint(msg)
 end
 
 
-
-function Queue:HexIdToSteamId(hexId)
-    local cid = math_floor(tonumber(string_sub(hexId, 7), 16))
-	local steam64 = math_floor(tonumber(string_sub( cid, 2)))
-	local a = steam64 % 2 == 0 and 0 or 1
-	local b = math_floor(math_abs(6561197960265728 - steam64 - a) / 2)
-	local sid = "steam_0:"..a..":"..(a == 1 and b -1 or b)
-    return sid
-end
-
 function Queue:IsSteamRunning(src)
     for _, id in ipairs(GetPlayerIdentifiers(src)) do
-        if string_sub(id, 1, 5) == "steam" then
+        if string.sub(id, 1, 5) == "steam" then
             return true
         end
     end
@@ -150,11 +159,11 @@ function Queue:IsPriority(ids)
     local prioList = Queue:GetPriorityList()
 
     for _, id in ipairs(ids) do
-        id = string_lower(id)
+        id = string.lower(id)
 
         if prioList[id] then prio = prioList[id] break end
 
-        if string_sub(id, 1, 5) == "steam" then
+        if string.sub(id, 1, 5) == "steam" then
             local steamid = Queue:HexIdToSteamId(id)
             if prioList[steamid] then prio = prioList[steamid] break end
         end
@@ -175,11 +184,11 @@ function Queue:HasTempPriority(ids)
     local tmpPrio = Queue:GetTempPriorityList()
 
     for _, id in pairs(ids) do
-        id = string_lower(id)
+        id = string.lower(id)
 
         if tmpPrio[id] then return tmpPrio[id].power, tmpPrio[id].endTime, id end
 
-        if string_sub(id, 1, 5) == "steam" then
+        if string.sub(id, 1, 5) == "steam" then
             local steamid = Queue:HexIdToSteamId(id)
             if tmpPrio[steamid] then return tmpPrio[steamid].power, tmpPrio[steamid].endTime, id end
         end
@@ -194,13 +203,13 @@ function Queue:AddToQueue(ids, connectTime, name, src, deferrals,point,roleStrin
         source = src,
         ids = ids,
         name = name,
-        priority = Queue:IsPriority(ids) or (src == "debug" and math_random(0, 15)),
+        priority = Queue:IsPriority(ids) or (src == "debug" and math.random(0, 15)),
         timeout = 0,
         point = point,
         roleStrings = roleStrings,
         deferrals = deferrals,
         firstconnect = connectTime,
-        queuetime = function() return (os_time() - connectTime) end
+        queuetime = function() return (os.time() - connectTime) end
     }
 
     local _pos = false
@@ -227,7 +236,7 @@ function Queue:AddToQueue(ids, connectTime, name, src, deferrals,point,roleStrin
                 
     
                 if _pos then
-                    Queue:DebugPrint(string_format("%s[%s] was prioritized and placed %d/%d in queue", tmp.name, ids[1], _pos, queueCount))
+                    Queue:DebugPrint(string.format("%s[%s] was prioritized and placed %d/%d in queue", tmp.name, ids[1], _pos, queueCount))
                     break
                 end
             end
@@ -237,9 +246,9 @@ function Queue:AddToQueue(ids, connectTime, name, src, deferrals,point,roleStrin
 
     if not _pos then
         _pos = Queue:GetSize() + 1
-        Queue:DebugPrint(string_format("%s[%s] was placed %d/%d in queue", tmp.name, ids[1], _pos, queueCount))
+        Queue:DebugPrint(string.format("%s[%s] was placed %d/%d in queue", tmp.name, ids[1], _pos, queueCount))
     end
-    table_insert(queueList, _pos, tmp)
+    queueList[_pos] = tmp
 end
 
 function Queue:RemoveFromQueue(ids, bySource, byIndex)
@@ -247,7 +256,7 @@ function Queue:RemoveFromQueue(ids, bySource, byIndex)
 
     if byIndex then
         if queueList[byIndex] then
-            table_remove(queueList, byIndex)
+            queueList[byIndex] = nil
         end
 
         return
@@ -255,7 +264,7 @@ function Queue:RemoveFromQueue(ids, bySource, byIndex)
 
     if Queue:IsInQueue(ids, false, bySource) then
         local pos, data = Queue:IsInQueue(ids, true, bySource)
-        table_remove(queueList, pos)
+        queueList[pos] = nil
     end
 end
 
@@ -286,7 +295,7 @@ function Queue:RemoveFromConnecting(ids, bySource, byIndex)
 
     if byIndex then
         if connList[byIndex] then
-            table_remove(connList, byIndex)
+            connList[byIndex] = nil
         end
 
         return
@@ -308,7 +317,7 @@ function Queue:RemoveFromConnecting(ids, bySource, byIndex)
         end
 
         if inConnecting then
-            table_remove(connList, genericKey1)
+            connList[genericKey1] = nil
             return true
         end
     end
@@ -331,7 +340,7 @@ function Queue:AddToConnecting(ids, ignorePos, autoRemove, done)
     if Queue:ConnectingSize() + Queue:GetPlayerCount() + 1 > Queue.MaxPlayers then remove() return false end
     
     if ids[1] == "debug" then
-        table_insert(connList, {source = ids[1], ids = ids, name = ids[1], firstconnect = ids[1], priority = ids[1], timeout = 0})
+        connList[#connList+1] = {source = ids[1], ids = ids, name = ids[1], firstconnect = ids[1], priority = ids[1], timeout = 0}
         return true
     end
 
@@ -340,7 +349,7 @@ function Queue:AddToConnecting(ids, ignorePos, autoRemove, done)
     local pos, data = Queue:IsInQueue(ids, true)
     if not ignorePos and (not pos or pos > 1) then remove() return false end
 
-    table_insert(connList, data)
+    connList[#connList+1] = data
     Queue:RemoveFromQueue(ids)
 
     return true
@@ -355,7 +364,7 @@ function Queue:GetIds(src)
 
     if ids and #ids > 1 then
         for k, id in ipairs(ids) do
-            if string_sub(id, 1, 3) == "ip:" and not Queue:IsPriority({id}) then table_remove(ids, k) end
+            if string.sub(id, 1, 3) == "ip:" and not Queue:IsPriority({id}) then ids[k] = nil end
         end
     end
 
@@ -384,9 +393,9 @@ function Queue:AddPriority(id, power, temp)
         local tempPower, tempEnd, tempId = Queue:HasTempPriority({id})
         id = tempId or id
 
-        Queue:GetTempPriorityList()[string_lower(id)] = {power = power, endTime = os_time() + temp} 
+        Queue:GetTempPriorityList()[string.lower(id)] = {power = power, endTime = os.time() + temp} 
     else
-        Queue:GetPriorityList()[string_lower(id)] = power
+        Queue:GetPriorityList()[string.lower(id)] = power
     end
     
     return true
@@ -394,7 +403,7 @@ end
 
 function Queue:RemovePriority(id)
     if not id then return false end
-    id = string_lower(id)
+    id = string.lower(id)
     Queue:GetPriorityList()[id] = nil
     return true
 end
@@ -404,7 +413,7 @@ function Queue:UpdatePosData(src, ids, deferrals)
     data.source = src
     data.ids = ids
     data.timeout = 0
-    data.firstconnect = os_time()
+    data.firstconnect = os.time()
     data.name = GetPlayerName(src)
     data.deferrals = deferrals
 end
@@ -421,8 +430,8 @@ function Queue:SetPos(ids, newPos)
     local pos, data = Queue:IsInQueue(ids, true)
     local queueList = Queue:GetQueueList()
 
-    table_remove(queueList, pos)
-    table_insert(queueList, newPos, data)
+    queueList[pos] = nil
+    queueList[newPos] = data
 end
 
 function Queue:CanJoin(src, cb)
@@ -430,7 +439,6 @@ function Queue:CanJoin(src, cb)
     
     for _, data in ipairs(_Queue.JoinCbs) do
         print(data)
-        print("Hello")
         local await = true
 
         data.func(src, function(reason)
@@ -446,22 +454,15 @@ function Queue:CanJoin(src, cb)
     if allow then cb(false) end
 end
 
-function Queue:OnJoin(cb, resource)
-    if not cb then return end
-
-    local tmp = {resource = resource, func = cb}
-    table_insert(_Queue.JoinCbs, tmp)
-end
-
-exports("GetQueueExports", function()
+function GetQueueExports()
     return Queue
-end)
+end
 
 local function playerConnect(name, setKickReason, deferrals)
     local src = source
     local ids = Queue:GetIds(src)
     local name = GetPlayerName(src)
-    local connectTime = os_time()
+    local connectTime = os.time()
     local connecting = true
     deferrals.defer()
     local point = 0
@@ -535,7 +536,7 @@ local function playerConnect(name, setKickReason, deferrals)
             
             deferrals.update(Config.Language.whitelist.checkingRoles)
             -- deferrals.update(Config.Language..connecting)
-            PerformHttpRequest("https://discord.com/api/v9/guilds/"..Config.discordServerGuild.."/members".."/"..string.sub(currentDiscordID, 9), function (errorCode, rdata, resultHeaders)
+            PerformHttpRequest("https://discord.com/api/v10/guilds/"..Config.discordServerGuild.."/members".."/"..string.sub(currentDiscordID, 9), function (errorCode, rdata, resultHeaders)
                 local res=json.decode(rdata)
                 if errorCode == 200 then
                     local roles = json.encode(res.roles)
@@ -587,7 +588,7 @@ local function playerConnect(name, setKickReason, deferrals)
             done(reason and tostring(reason) or "You were blocked from joining")
             Queue:RemoveFromQueue(ids)
             Queue:RemoveFromConnecting(ids)
-            Queue:DebugPrint(string_format("%s[%s] was blocked from joining; Reason: %s", name, ids[1], reason))
+            Queue:DebugPrint(string.format("%s[%s] was blocked from joining; Reason: %s", name, ids[1], reason))
             CancelEvent()
             return
         end
@@ -625,7 +626,7 @@ local function playerConnect(name, setKickReason, deferrals)
     if Queue:IsInQueue(ids) then
         rejoined = true
         Queue:UpdatePosData(src, ids, deferrals)
-        Queue:DebugPrint(string_format("%s[%s] has rejoined queue after cancelling", name, ids[1]))
+        Queue:DebugPrint(string.format("%s[%s] has rejoined queue after cancelling", name, ids[1]))
     else
         Queue:AddToQueue(ids, connectTime, name, src, deferrals,point,RoleStrings)
 
@@ -658,7 +659,7 @@ local function playerConnect(name, setKickReason, deferrals)
         return
     end
     
-    update(string_format(Config.Language.pos .. ((Queue:TempSize() and Config.ShowTemp) and " (" .. Queue:TempSize() .. " temp)" or "00:00:00"), pos, Queue:GetSize(), ""))
+    update(string.format(Config.Language.pos .. ((Queue:TempSize() and Config.ShowTemp) and " (" .. Queue:TempSize() .. " temp)" or "00:00:00"), pos, Queue:GetSize(), ""))
 
     if rejoined then return end
 
@@ -690,7 +691,7 @@ local function playerConnect(name, setKickReason, deferrals)
         local endPoint = GetPlayerEndpoint(data.source)
         if not endPoint then data.timeout = data.timeout + 0.5 else data.timeout = 0 end
 
-        if data.timeout >= Config.QueueTimeOut and os_time() - connectTime > 5 then
+        if data.timeout >= Config.QueueTimeOut and os.time() - connectTime > 5 then
             remove("[Queue] Removed due to timeout")
             Queue:DebugPrint(name .. "[" .. ids[1] .. "] was removed from the queue because they timed out")
             return
@@ -719,9 +720,9 @@ local function playerConnect(name, setKickReason, deferrals)
         end
 
         local seconds = data.queuetime()
-        local qTime = string_format("%02d", math_floor((seconds % 86400) / 3600)) .. ":" .. string_format("%02d", math_floor((seconds % 3600) / 60)) .. ":" .. string_format("%02d", math_floor(seconds % 60))
+        local qTime = string.format("%02d", math.floor((seconds % 86400) / 3600)) .. ":" .. string.format("%02d", math.floor((seconds % 3600) / 60)) .. ":" .. string.format("%02d", math.floor(seconds % 60))
 
-        local msg = string_format(Config.Language.pos .. ((Queue:TempSize() and Config.ShowTemp) and " (" .. Queue:TempSize() .. " temp)" or ""), pos, Queue:GetSize(), qTime)
+        local msg = string.format(Config.Language.pos .. ((Queue:TempSize() and Config.ShowTemp) and " (" .. Queue:TempSize() .. " temp)" or ""), pos, Queue:GetSize(), qTime)
         update(msg, data.deferrals)
     end
 end
@@ -733,7 +734,7 @@ Citizen.CreateThread(function()
             Queue:RemoveFromQueue(data.source, true)
             Queue:RemoveFromConnecting(data.source, true)
         elseif pos then
-            table_remove(Queue:GetQueueList(), pos)
+            Queue:GetQueueList()[pos] = nil
         end
     end
 
@@ -749,7 +750,7 @@ Citizen.CreateThread(function()
     
             data.timeout = data.timeout + 1
     
-            if ((data.timeout >= 300 and not endPoint) or data.timeout >= Config.ConnectTimeOut) and data.source ~= "debug" and os_time() - data.firstconnect > 5 then
+            if ((data.timeout >= 300 and not endPoint) or data.timeout >= Config.ConnectTimeOut) and data.source ~= "debug" and os.time() - data.firstconnect > 5 then
                 remove(data)
                 Queue:DebugPrint(data.name .. "[" .. data.ids[1] .. "] was removed from the connecting queue because they timed out")
             else
@@ -758,7 +759,7 @@ Citizen.CreateThread(function()
         end
 
         for id, data in pairs(Queue:GetTempPriorityList()) do
-            if os_time() >= data.endTime then
+            if os.time() >= data.endTime then
                 Queue:GetTempPriorityList()[id] = nil
             end
         end
@@ -806,81 +807,99 @@ AddEventHandler("playerDropped", function()
     end
 end)
 
-AddEventHandler("onResourceStop", function(resource)
-    if Queue.DisplayQueue and Queue.InitHostName and resource == GetCurrentResourceName() then SetConvar("sv_hostname", Queue.InitHostName) end
+
+
+AddEventHandler("onResourceStart", function(resourceName)
+    local announce=false
+    Queue:DebugPrint("^1 [connectqueue] Disabling hardcap ^7")
+    if Config.DisableHardCap then
+        if resourceName == "hardcap" then CancelEvent() return end
+        StopResource("hardcap")
+    end
+
+    if (GetCurrentResourceName() ~= resourceName) then
+        return
+    end
+
+    if Queue.DisplayQueue and Queue.InitHostName then
+        SetConvar("sv_hostname", Queue.InitHostName)
+    end
+    
+    if Config.enableDiscordWhitelist then
+        PerformHttpRequest("https://discord.com/api/v10/guilds/"..Config.discordServerGuild, function (errorCode, resultData, resultHeaders)
+            if errorCode == 200 then
+                PerformHttpRequest("https://discord.com/api/v10/guilds/"..Config.discordServerGuild.."/preview", function (errorCode, rdata, resultHeaders)
+                    local res=json.decode(rdata)
+                    if errorCode == 200 then
+                        if not announce then
+                            announce=true
+                        print('^6 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n  Bot Connect To '..res.name..' Server  \n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+                        end
+                    elseif errorCode == 403 then
+                        if not announce then
+                            announce=true
+                            print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Invite / ReInvite Bot xxxxxxxxxxxxxx \n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+                        end
+                    elseif errorCode == 401 then
+                        if not announce then
+                            announce=true
+                            print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Check Discord Token xxxxxxxxxxxxxx\n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+                        end
+                    end
+                  end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Config.discordBotToken})
+            elseif errorCode == 403 then
+                if not announce then
+                    announce=true
+                    print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Invite/ReInvite Bot xxxxxxxxxxxxxx \n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+                end
+            elseif errorCode == 401 then
+                if not announce then
+                    announce=true
+                    print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Check Discord Token xxxxxxxxxxxxxx\n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+                end
+            else
+                if not announce then
+                    announce=true
+                    print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxx Please Check Discord Token and Guild ID xxxxxxxx\n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
+                end
+
+            end
+          end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Config.discordBotToken})
+    end
+    Queue.LoadExports()
+end)
+
+AddEventHandler("onResourceStop", function(resourceName)
+    if (GetCurrentResourceName() ~= resourceName) then
+        return
+    end
+
+    Queue.Ready = false
+    Queue.Exports = nil
+
+    if Queue.DisplayQueue and Queue.InitHostName then SetConvar("sv_hostname", Queue.InitHostName) end
     
     for k, data in ipairs(_Queue.JoinCbs) do
-        if data.resource == resource then
-            table_remove(_Queue.JoinCbs, k)
+        if data.resource == resourceName then
+            _Queue.JoinCbs[k] = nil
         end
     end
 end)
 
-if Config.DisableHardCap then
-    local announce=false
-    Queue:DebugPrint("^1 [connectqueue] Disabling hardcap ^7")
 
-    AddEventHandler("onResourceStarting", function(resource)
-        if resource == "hardcap" then CancelEvent() return end
-
-        if Config.enableDiscordWhitelist then
-            PerformHttpRequest("https://discord.com/api/v9/guilds/"..Config.discordServerGuild, function (errorCode, resultData, resultHeaders)
-                if errorCode == 200 then
-                    PerformHttpRequest("https://discord.com/api/v9/guilds/"..Config.discordServerGuild.."/preview", function (errorCode, rdata, resultHeaders)
-                        local res=json.decode(rdata)
-                        if errorCode == 200 then
-                            if not announce then
-                                announce=true
-                            print('^6 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n  Bot Connect To '..res.name..' Server  \n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-                            end
-                        elseif errorCode == 403 then
-                            if not announce then
-                                announce=true
-                                print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Invite / ReInvite Bot xxxxxxxxxxxxxx \n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-                            end
-                        elseif errorCode == 401 then
-                            if not announce then
-                                announce=true
-                                print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Check Discord Token xxxxxxxxxxxxxx\n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-                            end
-                        end
-                      end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Config.discordBotToken})
-                elseif errorCode == 403 then
-                    if not announce then
-                        announce=true
-                        print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Invite/ReInvite Bot xxxxxxxxxxxxxx \n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-                    end
-                elseif errorCode == 401 then
-                    if not announce then
-                        announce=true
-                        print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxxxxxxxx Please Check Discord Token xxxxxxxxxxxxxx\n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-                    end
-                else
-                    if not announce then
-                        announce=true
-                        print('^1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx \n xxxxxxxx Please Check Discord Token and Guild ID xxxxxxxx\n xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx')
-                    end
-
-                end
-              end, "GET", "", {["Content-type"] = "application/json", ["Authorization"] = "Bot " .. Config.discordBotToken})
-        end
-    end)
-    
-    StopResource("hardcap")
-end
 
 local testAdds = 0
 local commands = {}
 
 commands.addq = function()
     Queue:DebugPrint("ADDED DEBUG QUEUE")
-    Queue:AddToQueue({"steam:110000103fd1bb1"..testAdds}, os_time(), "TestAdd: " .. testAdds,math.random(1,100), "debug",100,"DeBUG 100")
+    Queue:AddToQueue({"steam:110000103fd1bb1"..testAdds}, os.time(), "TestAdd: " .. testAdds,math.random(1,100), "debug",100,"DeBUG 100")
     testAdds = testAdds + 1
 end
 
 commands.addqq = function()
     Queue:DebugPrint("ADDED DEBUG QUEUE")
-    Queue:AddToQueue({"steam:110000103fd1bb1"..testAdds}, os_time(), "TestAdd: " .. testAdds,math.random(1,100), "debug",10,"DeBUG 10")
+    Queue:AddToQueue({"steam:110000103fd1bb1"..testAdds}, os.time(), "TestAdd: " .. testAdds,math.random(1,100), "debug",10,"DeBUG 10")
     testAdds = testAdds + 1
 end
 
@@ -941,7 +960,7 @@ commands.printtp = function()
     Queue:DebugPrint("CURRENT TEMP PRIORITY LIST")
 
     for k, data in pairs(Queue:GetTempPriorityList()) do
-        Queue:DebugPrint(k .. ": Power: " .. tostring(data.power) .. " | EndTime: " .. tostring(data.endTime) .. " | CurTime: " .. tostring(os_time()))
+        Queue:DebugPrint(k .. ": Power: " .. tostring(data.power) .. " | EndTime: " .. tostring(data.endTime) .. " | CurTime: " .. tostring(os.time()))
     end
 end
 
@@ -976,7 +995,7 @@ commands.setdata = function(args)
         local dif = time - num
 
         data.firstconnect = data.firstconnect + dif
-        data.queuetime = function() return (os_time() - data.firstconnect) end
+        data.queuetime = function() return (os.time() - data.firstconnect) end
     else
         data[args[2]] = num and num or args[3]
     end
@@ -993,8 +1012,10 @@ end
 AddEventHandler("rconCommand", function(command, args)
     if command == "queue" and commands[args[1]] then
         command = args[1]
-        table_remove(args, 1)
+        args[1] = nil
         commands[command](args)
         CancelEvent()
     end
 end)
+
+SetTimeout(1, function() Queue.LoadExports() end)
