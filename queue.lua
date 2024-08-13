@@ -809,17 +809,15 @@ end)
 
 
 AddEventHandler("onResourceStart", function(resourceName)
-    local announce=false
-    Queue:DebugPrint("^1 [connectqueue] Disabling hardcap ^7")
-    if Config.DisableHardCap then
-        if resourceName == "hardcap" then CancelEvent() return end
-        StopResource("hardcap")
-    end
-
     if (GetCurrentResourceName() ~= resourceName) then
         return
     end
 
+    local announce=false
+    if Config.DisableHardCap and  GetResourceState('hardcap') == 'started' then
+        Queue:DebugPrint("^1 [connectqueue] Disabling hardcap ^7")
+        StopResource("hardcap")
+    end
     if Queue.DisplayQueue and Queue.InitHostName then
         SetConvar("sv_hostname", Queue.InitHostName)
     end
